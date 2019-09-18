@@ -1,0 +1,28 @@
+#/bin/bash
+#sudo apt-get update -y
+#sudo apt-get install awscli
+#aws configure
+#do the configuration
+#Create a IAM user with access key and access key ID
+#provide access key ID, access key and accesskey ID
+#provide the regios. Should be like us-east-1
+#default output format as json
+
+
+echo "Creating EC2 instance.../n"
+aws ec2 run-instances --image-id ami-07d0cf3af28718ef8 --count 1 --instance-type t2.micro --key-name test123 --security-group-ids sg-058ea001e912e5f6c --subnet-id subnet-03b51ad5c9ba8d588>>launch.json
+echo "EC2 done"
+echo "Getting private IP"
+Private_IP=`grep -m 1 PrivateIpAddress launch.json | sed -e 's/"PrivateIpAddress": "\(.*\)",/\1/'| sed 's/^[ \t]*//;s/[ \t]*$//'`
+echo "$Private_IP"
+echo "Sleeping for 1 min"
+sleep 2m
+echo "Doing ssh"
+ssh-keyscan $Private_IP >> $HOME/.ssh/known_hosts
+ssh -i "test123.pem" ubuntu@$Private_IP << EOF
+echo "system update"
+sudo apt-get update -y
+echo "installing apache"
+sudo apt-get install apache2 -y
+EOF
+rm launch.json
