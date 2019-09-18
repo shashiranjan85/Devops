@@ -1,0 +1,54 @@
+#/bin/bash
+#private ip of EC2 instance
+#Private_IP="10.0.3.153"
+#EC2 instance details
+Pemfile="test123"
+ImageID="ami-07d0cf3af28718ef8"
+InstanceType="t2.micro"
+SecurityGroup="sg-058ea001e912e5f6c"
+SubnetID="subnet-03b51ad5c9ba8d588"
+
+
+echo -n "Generating RSA key pair....."
+ssh-keygen -t rsa -N "" -f .ssh/id_rsa
+echo "Done"
+
+# Create EC2 instance with CLI
+echo -n "Creating EC2 instance.../n"
+aws ec2 run-instances --image-id $ImageID --count 1 --instance-type $InstanceType --key-name $Pemfile --security-group-ids $SecurityGroup --subnet-id $SubnetID>launch.json
+echo "Done"
+echo -n "Getting private IP"
+Private_IP=`grep -m 1 PrivateIpAddress launch.json | sed -e 's/"PrivateIpAddress": "\(.*\)",/\1/'| sed 's/^[ \t]*//;s/[ \t]*$//'`
+echo "$Private_IP"
+echo "Sleeping for 2 min"
+sleep 2m
+
+#.........
+
+echo -n "Adding to known hosts...."
+ssh-keyscan $Private_IP >> $HOME/.ssh/known_hosts
+echo "Done"
+
+echo -n "Copying id_rsa.pub file to $Private_IP:/home/ubuntu/....."
+scp -i "/home/ubuntu/test123.pem" "/home/ubuntu/.ssh/id_rsa.pub" ubuntu@$Private_IP:/home/ubuntu/
+echo "Done"
+
+echo -n "ssh to $Private_IP with pem file and adding id_rsa.pub to authorized_keys ....."
+ssh -i "test123.pem" ubuntu@$Private_IP << EOF
+cat /home/ubuntu/id_rsa.pub >> /home/ubuntu/.ssh/authorized_keys
+exit
+EOF
+echo "Done"
+
+echo -n "ssh without passing any key and installing apache...."
+cd /home/ubuntu/.ssh
+ssh $Private_IP << EOF
+echo -n "system update..."
+sudo apt-get update -y
+echo "Done"
+echo -n "installing apache...."
+sudo apt-get install apache2 -y
+echo "Done"
+EOF
+
+echo "Done"
