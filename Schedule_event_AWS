@@ -1,0 +1,126 @@
+#/bin/bash
+
+cd /home/neova/Work_study/Scripts/json
+fileName="AWS`date +%d_%b_%Y`"
+InstanceID=i-0532f8dba14120382
+InstanceIDList=()
+SystemReboot=()
+ScheduledEventInstanceList=()
+time="10:00 AM Sun"
+LOG_FILE="ScheduledEvents.log"
+
+logit()
+{
+    echo "[${USER}][`date`] - ${*}" >> ${LOG_FILE}
+}
+
+# Get the list of Instances
+echo -n "Get all the instances in a file-------"
+aws ec2 describe-instances --query "Reservations[].Instances[].InstanceId" | sed '1d;$d' >$fileName.json
+echo "Done"
+
+logit "The Instance details are stored in: $fileName.json"
+
+#getting the instance list
+echo "Get the Instance list ......"
+while IFS= read -r line;
+	do
+	#echo -n "Getting instance list"
+	InstanceID=$(echo "$line" | grep i | cut -d'"' -f2)
+	#echo "Instance id = $InstanceID"
+	InstanceIDList+=("$InstanceID")
+
+
+	#Getting events for the instance
+	#aws ec2 describe-instance-status --instance-id "$InstanceID" --query "InstanceStatuses[].Events">>"$InstanceID".json
+
+done < "$fileName.json"
+
+echo "Instance ID list :${InstanceIDList[@]}"
+
+logit "The List of all the Instance: ${InstanceIDList[@]}"
+
+#getting Instance event code
+
+for i in "${InstanceIDList[@]}";
+
+do {
+	echo "$i"
+#change the instance id
+if [ -z `aws ec2 describe-instance-status --instance-id "$i" --query "InstanceStatuses[].Events" | grep Code` ] 
+then
+
+	echo "There is no scheduled event"
+	logit "There is no scheduled event for Instance ID: $i"
+else
+	if [ `aws ec2 describe-instance-status --instance-id "$i" --query "InstanceStatuses[].Events" | grep Code | cut -d'"' -f4` == "system-reboot" ] 
+		then 
+			echo "There is System Reboot event for instance : $" 
+			echo -n "Adding this instance to ScheduledEventInstanceList....."
+			ScheduledEventInstanceList+=("${InstanceIDList[$i]}")
+		#elif [ `aws ec2 describe-instance-status --instance-id "${InstanceIDList[@]:$i}" --query "InstanceStatuses[].Events" | grep Code | cut -d'"' -f4` == "Instance stop" ] 
+	elif [ `aws ec2 describe-instance-status --instance-id "$i" --query "InstanceStatuses[].Events" | grep Code | cut -d'"' -f4` == "Instance stop" ] 
+			then
+				echo "There is Instance stop event for instance : $" 
+				echo -n "Adding this instance to ScheduledEventInstanceList....."
+				ScheduledEventInstanceList+=("${InstanceIDList[@]:$i}")
+
+		elif [[ `aws ec2 describe-instance-status --instance-id "$i" --query "InstanceStatuses[].Events" | grep Code | cut -d'"' -f4` == "Instance retirement" ]]
+		 then
+		 		echo "There is Instance retirement event for instance : $" 
+				echo -n "Adding this instance to ScheduledEventInstanceList....."
+				ScheduledEventInstanceList+=("${InstanceIDList[@]:$i}")
+
+		elif [[ `aws ec2 describe-instance-status --instance-id "$i" --query "InstanceStatuses[].Events" | grep Code | cut -d'"' -f4` == "Instance reboot" ]]
+		 then
+		 		echo "There is Instance reboot event for instance : $" 
+				echo -n "Adding this instance to ScheduledEventInstanceList....."
+				ScheduledEventInstanceList+=("${InstanceIDList[@]:$i}")
+
+		elif [[ `aws ec2 describe-instance-status --instance-id "$i" --query "InstanceStatuses[].Events" | grep Code | cut -d'"' -f4` == "System maintenance" ]] 
+			then
+				echo "There is System maintenance event for instance : $" 
+				echo -n "Adding this instance to ScheduledEventInstanceList....."
+				ScheduledEventInstanceList+=("${InstanceIDList[@]:$i}")
+							
+		else 
+			echo "There is no System Reboot event scheduled for instance : $"
+
+		fi
+	fi
+	}
+done
+
+logit "The List of all the Instance with a scheduled event: ${ScheduledEventInstanceList[@]}"
+
+
+echo "Instance with scheduled event: ${ScheduledEventInstanceList[@]}"
+
+
+for i in "${ScheduledEventInstanceList[@]}";
+do 
+	#Stopping the EC2 instance
+	echo -n "Stopping the EC2 instance. $i..."
+	#aws lambda invoke --function-name "stopec2" --log-type Tail /home/neova/Work_study/Scripts/outputfile.txt
+
+	#aws ec2 stop-instances --instance-ids "${ScheduledEventInstanceList[$i]}"
+
+	echo "Done"
+	logit "Stopping instance: $i"
+	#stopec2 "${ScheduledEventInstanceList[@]:$i}"
+	# | at "$time"
+	#sleep 2m
+	echo "Waiting for 2 min"
+
+	#Starting the EC2 instance
+	echo -n "Starting the EC2 instance . $i....."
+	#aws lambda invoke --function-name "startec2" --log-type Tail /home/neova/Work_study/Scripts/outputfile.txt
+	#aws ec2 start-instances --instance-ids "$InstanceID"
+
+	echo "Done"
+	logit "Starting instance: ${ScheduledEventInstanceList[$i]}"
+
+	#getEC2status "${ScheduledEventInstanceList[@]:$i}"
+	#startec2 "${ScheduledEventInstanceList[$i]}"
+
+done
